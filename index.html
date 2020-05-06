@@ -102,10 +102,17 @@ function metadataLoaded(data) {
 
     whenMapLoaded(function() {
 
+        if (map.getSource('mkw-events')) 
+            map.removeSource('mkw-events');
+
+
         map.addSource('mkw-events', {
             type: 'geojson',
             data: mapData
         });
+
+        if (map.getLayer('mkw-event-line')) 
+            map.removeLayer('mkw-event-line');
 
         map.addLayer({
             id: 'mkw-event-line',
@@ -154,8 +161,19 @@ function onLoad() {
 
     d3.csv('sensor.csv', function(d) {
         console.log(d);
+        var k = 0;
+        var iter = setInterval(function(){
+            if (k == 30) {
+                clearInterval(iter);
+            }
+            else {
+                metadataLoaded(d);
+                k++;
+            }
+        }, 300)
         metadataLoaded(d);
     })
+
 
 }
 
@@ -171,5 +189,3 @@ onLoad();
 
 </body>
 </html>
-LICENSE#
-Released under the The MIT License.
