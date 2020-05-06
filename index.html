@@ -1,11 +1,3 @@
-Popular / AboutSteve Bennett’s Block e89f350b06d8c5a9390ca24c5b625e83
-Updated April 20, 2017
-MKW map
-
-Open
-Built with blockbuilder.org
-
-index.html#
 <!DOCTYPE html>
 <html>
 <head>
@@ -53,80 +45,6 @@ index.html#
 <div id='map'></div>
 <script>
 
-//http://mkw.melbourne.vic.gov.au/wp-json/wp/v2/posts?categories=1&per_page=100
-//http://mkw.melbourne.vic.gov.au/wp-json/acf/v3/posts?categories=1&per_page=100
-/*
-TODO:
-- how the hell do I geocode?
--- one off process?
--- convert json to csv, save to disk
--- load into google sheets
--- geocode
--- re-export
--- somehow import??
-
-
-- tweak style so it's just big pins, no invisible titles [text titles that use a non-present text attribute]
-*/
-
-
-
-/* The main MKW site needs to call this hook whenever the filter changes 
-Sample values (each can be undefined for no filter)
-dayFilter: "06/05/2017"
-themeFilter: "Startups"
-typeFilter: "Talk"
-accessibilityFilter: "Wheelchair accessible"
-
-*/
-
-var filters = {
-    day: undefined,
-    theme: undefined,
-    type: undefined,
-    accessibility: undefined
-};
-
-function updateFilter(dayFilter, themeFilter, typeFilter, accessibilityFilter) {
-    //**** Replace from here...
-
-    // maintain state from previous filter updates
-    if (dayFilter) {
-        filters.day = dayFilter === 'all days' ? undefined : dayFilter;
-    }
-    if (themeFilter) {
-        filters.theme = themeFilter === 'all themes' ? undefined : themeFilter;
-    }
-    if (typeFilter) {
-        filters.type = typeFilter === 'all types' ? undefined : typeFilter;
-    }
-    if (accessibilityFilter) {
-        filters.accessibility = accessibilityFilter === 'all venues' ? undefined : accessibilityFilter;
-    }
-
-    var mapFilters = ['all'];
-    // now use the current state of filters to generate map filter
-    if (filters.day) {
-        mapFilters.push(['==', 'program_date',filters.day]);
-    }
-    if (filters.theme) {
-        mapFilters.push(['has','theme:' + filters.theme]);
-    }
-    if (filters.type) {
-        mapFilters.push(['has','type:' + filters.type]);
-    }
-    if (filters.accessibility) {
-        mapFilters.push(['has', 'accessibility:' + filters.accessibility]);
-    }
-
-    if (mapFilters.length === 1) {
-        map.setFilter('mkw-event-pins', undefined);
-    } else {
-        map.setFilter('mkw-event-pins', mapFilters);
-    }
-    // **** To here
-}
-
 function def(a, b) {
     return a !== undefined ? a : b;
 }
@@ -139,21 +57,21 @@ function eventsToGeoJson(events) {
         type:'FeatureCollection',
         features: []
     };
-    Object.keys(mkwEvents).forEach(function(id) {
-    	var k1 = Math.random()
-    	var k2 = Math.random()
-    	var k3 = Math.random()
+    events.forEach(function(event) {
+        var long = Number(event.longitude);
+        var lat = Number(event.latitude);
+        var k3 = Math.random()
         mapData.features.push({
             type: 'Feature',
-            properties: mkwEvents[id],
+            properties: event.sensor_id,
             geometry: {
                 type: 'LineString',
 
                 // ### TODO: use actual coordinates
                 coordinates: [
-                    [144.85 + k1 * 0.2 - 0.001, -37.9 + k2 * 0.2],
-                    [144.85 + k1 * 0.2, -37.9 + k2 * 0.2 + k3 * 0.05],
-                    [144.85 + k1 * 0.2 + 0.001, -37.9 + k2 * 0.2]
+                    [long - 0.0001, lat],
+                    [long, lat + k3 * 0.02],
+                    [long + 0.0001, lat]
                 ]
             }
         });
@@ -172,52 +90,40 @@ function dumpAddressesCsv(acfs) {
         });
         
     });
-    console.log(d3.csvFormat(rows));
+    // console.log(d3.csvFormat(rows));
 }
 
 var metadataCount = 0;
 
-function metadataLoaded() {
-    if (++metadataCount < 2)
-        return; // keep waiting until we have both main metadata and advanced custom fields. (Because we're not using a Promises library)
+function metadataLoaded(data) {
 
-    
-    // Now we have all the metadata for every event, let's create a GeoJSON object with all of it:
-    var mapData = eventsToGeoJson(mkwEvents);
+    var mapData = eventsToGeoJson(data);
+    console.log(mapData);
 
     whenMapLoaded(function() {
-        // add the map data so we can style it
+
         map.addSource('mkw-events', {
             type: 'geojson',
             data: mapData
         });
 
-        // now add a style layer that depends on it.
         map.addLayer({
-            'id': 'mkw-event-line',
-            'source': 'mkw-events',
-            'type': 'line',
-            'layout': {
+            id: 'mkw-event-line',
+            source: 'mkw-events',
+            type: 'line',
+            layout: {
                 'line-cap': 'round',
-     			'line-join': 'round'
-
-                /*'text-optional': true,
-                'text-size': 18,
-                'text-font': ['CoM Regular', 'Arial Unicode MS Regular'],
-                'text-offset': [0,0.5],
-                'text-anchor': 'top',
-                'text-field': '{Organisation}'*/
-                
-            }, paint: {
+                'line-join': 'round'            
+            }, 
+            paint: {
                 'line-color': '#ed6498',
-				'line-width': 2.5,
-				'line-opacity': 0.8
-                //'text-color': '#00aecb'
+                'line-width': 2.5,
+                'line-opacity': 0.8
             }
         });
 
         // When we click on a pin, show a popup.
-        map.on('click', 'mkw-event-line', function (e) {
+        /* map.on('click', 'mkw-event-line', function (e) {
             var event = e.features[0];
             new mapboxgl.Popup()
                 .setLngLat(event.geometry.coordinates)
@@ -236,7 +142,7 @@ function metadataLoaded() {
 
         map.on('mouseleave', 'mkw-event-line', function () {
             map.getCanvas().style.cursor = '';
-        });
+        }); */
     });
 }
 
@@ -245,58 +151,11 @@ function whenMapLoaded(f) {
 }
 
 function onLoad() {
-    var postsUrl = 'http://mkw.melbourne.vic.gov.au/wp-json/wp/v2/posts?categories=1&per_page=100';
-    var acfUrl = 'http://mkw.melbourne.vic.gov.au/wp-json/acf/v3/posts?categories=1&per_page=100';
 
-
-    // ### for dev/testing as the above URLs don't support CORS
-    postsUrl = 'https://gist.githubusercontent.com/stevage/29faffd252d62f56b71319f9281f21ce/raw/fdf485a2850bb85ce80cf2f92f9be22b20daea91/posts.json';
-    acfUrl = 'https://gist.githubusercontent.com/stevage/ca8d8f0b41f10882ec0fd1de04240410/raw/d39c4fd4dd7ec4bc1db63a38ec615528a144664c/posts.json';
-
-
-    // get JSON with main metadata about each event
-    d3.json(postsUrl, function(j) {
-        j.forEach(function(event) {
-            mkwEvents[event.id] = def(mkwEvents[event.id], {});
-            mkwEvents[event.id].id = event.id;
-            mkwEvents[event.id].link = event.link;
-            mkwEvents[event.id].title = event.title.rendered;
-            mkwEvents[event.id].excerpt = event.excerpt.rendered;
-        });
-        metadataLoaded();
-    });
-    // get info with advanced custom fields metadata about each event
-    d3.json(acfUrl, function(j) {
-        dumpAddressesCsv(j);
-        j.forEach(function(acf) {
-            var event = acf.acf;
-            mkwEvents[acf.id] = def(mkwEvents[acf.id], {});
-            mkwEvents[acf.id].hero_image = event.hero_image;
-            mkwEvents[acf.id].location = event.location;
-            
-            mkwEvents[acf.id].event_dates_start = event.event_dates_start;
-            mkwEvents[acf.id].event_dates_end = event.event_dates_end;
-            mkwEvents[acf.id].program_date = event.program_date;
-
-            // We create properties like "theme:Startups", so we can filter on them with Mapbox.
-            def(event.theme, []).forEach(function(theme) {
-                mkwEvents[acf.id]['theme:' + theme] = true;
-            });
-            if (event.access !== "") {
-                def(event.access, []).forEach(function(accessibility) {
-                // "Wheelchair accessible". No auslan?
-                    mkwEvents[acf.id]['accessibility:' + accessibility] = true;
-                });
-            }
-            // *** This next line had a bug.
-            def(event.type, []).forEach(function(type) {
-                mkwEvents[acf.id]['type:' + type] = true;
-            });
-            
-
-        });
-        metadataLoaded();
-    });
+    d3.csv('sensor.csv', function(d) {
+        console.log(d);
+        metadataLoaded(d);
+    })
 
 }
 
