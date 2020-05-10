@@ -5,15 +5,9 @@
     <title></title>
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
 
-    <!-- Need these! -->
-    <script src="https://d3js.org/d3-collection.v1.min.js"></script>
-    <script src="https://d3js.org/d3-dispatch.v1.min.js"></script>
-    <script src="https://d3js.org/d3-dsv.v1.min.js"></script>
-    <script src="https://d3js.org/d3-request.v1.min.js"></script>
-    
-    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.36.0/mapbox-gl.js'></script>
-    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.36.0/mapbox-gl.css' rel='stylesheet' />
-    <!-- -->
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v1.10.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v1.10.0/mapbox-gl.css" rel="stylesheet" />
 
     <style>
         /* This should probably go */
@@ -36,6 +30,23 @@
             background:#00aecb;
             color:white;
         }
+
+        .map-overlay {
+            font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            position: absolute;
+            width: 25%;
+            top: 0;
+            left: 0;
+            padding: 10px;
+        }
+
+        .map-overlay .map-overlay-inner {
+            background-color: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
     </style>
 
 
@@ -43,12 +54,15 @@
 <body>
 
 <div id='map'></div>
+<div class="map-overlay top">
+    <div class="map-overlay-inner">
+        <h2>Pedestrains in Melbourne</h2>
+        <label id="date"></label>
+        <input id="slider" type="range" min="1" max="61" step="1" value="1" />
+    </div>
+</div>
+
 <script>
-
-function def(a, b) {
-    return a !== undefined ? a : b;
-}
-
 
 var mkwEvents = {};
 
@@ -60,17 +74,20 @@ function eventsToGeoJson(events) {
     events.forEach(function(event) {
         var long = Number(event.longitude);
         var lat = Number(event.latitude);
-        var k3 = Math.random()
+        var num = Number(event.Counts);
+        var date = parseInt((Number(event.Month) - 1) * 31 + Number(event.Date));
         mapData.features.push({
             type: 'Feature',
-            properties: event.sensor_id,
+            properties: {
+                'sensor_id': event.sensor_id,
+                'date': date
+            },
             geometry: {
                 type: 'LineString',
 
-                // ### TODO: use actual coordinates
                 coordinates: [
                     [long - 0.0001, lat],
-                    [long, lat + k3 * 0.02],
+                    [long, lat + num * 0.0000005],
                     [long + 0.0001, lat]
                 ]
             }
@@ -90,30 +107,45 @@ function dumpAddressesCsv(acfs) {
         });
         
     });
-    // console.log(d3.csvFormat(rows));
 }
 
-var metadataCount = 0;
+var months = [
+    'March',
+    'April'
+];
 
-function metadataLoaded(data) {
+function filterBy(date) {
+    var filters = ['==', 'date', date];
+    map.setFilter('mkw-event-line', filters);
+    var month = Math.floor(date / 32);
+    var day = date - month * 31;
+    document.getElementById('date').textContent = months[month] + " " + day;
+}
 
-    var mapData = eventsToGeoJson(data);
-    console.log(mapData);
+function whenMapLoaded(f) {
+    return map.loaded() ? f() : map.once('load', f);
+}
 
-    whenMapLoaded(function() {
 
-        if (map.getSource('mkw-events')) 
-            map.removeSource('mkw-events');
+mapboxgl.accessToken = 'pk.eyJ1IjoiY2l0eW9mbWVsYm91cm5lIiwiYSI6ImNpejdob2J0czAwOWQzM21ubGt6MDVqaHoifQ.55YbqeTHWMK_b6CEAmoUlA';
+var map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/cityofmelbourne/cj1pz0q5d00382rp7zylkhxp1?update=1',
+    center: [144.9, -37.8],
+    zoom: 12
+});
+map.on('load', function(){
+    d3.csv('data.csv', function(err, d) {
+        if(err) throw err;
 
+        var mapData = eventsToGeoJson(d);
 
         map.addSource('mkw-events', {
             type: 'geojson',
             data: mapData
         });
 
-        if (map.getLayer('mkw-event-line')) 
-            map.removeLayer('mkw-event-line');
-
+        
         map.addLayer({
             id: 'mkw-event-line',
             source: 'mkw-events',
@@ -129,62 +161,17 @@ function metadataLoaded(data) {
             }
         });
 
-        // When we click on a pin, show a popup.
-        /* map.on('click', 'mkw-event-line', function (e) {
-            var event = e.features[0];
-            new mapboxgl.Popup()
-                .setLngLat(event.geometry.coordinates)
-                .setHTML(
-                    '<img src="' + event.properties.hero_image + '">' +
-                    '<h2>' + event.properties.title + '</h2>' + 
-                    event.properties.excerpt + 
-                    '<label class="dates">' + event.properties.program_date + ', ' + event.properties.event_dates_start + ' - ' +  event.properties.event_dates_end + '</label>' +
-                    '<a class="moreinfo" href="' + event.properties.link + '">More information</a>'
-                ).addTo(map);
-        });
+        filterBy(1);
 
-        map.on('mouseenter', 'mkw-event-line', function () {
-            map.getCanvas().style.cursor = 'pointer';
-        });
-
-        map.on('mouseleave', 'mkw-event-line', function () {
-            map.getCanvas().style.cursor = '';
-        }); */
-    });
-}
-
-function whenMapLoaded(f) {
-    return map.loaded() ? f() : map.once('load', f);
-}
-
-function onLoad() {
-
-    d3.csv('sensor.csv', function(d) {
-        console.log(d);
-        var k = 0;
-        var iter = setInterval(function(){
-            if (k == 30) {
-                clearInterval(iter);
-            }
-            else {
-                metadataLoaded(d);
-                k++;
-            }
-        }, 300)
-        metadataLoaded(d);
+        document
+            .getElementById('slider')
+            .addEventListener('input', function(e) {
+                var date = parseInt(e.target.value);
+                filterBy(date);
+            });
     })
 
-
-}
-
-mapboxgl.accessToken = 'pk.eyJ1IjoiY2l0eW9mbWVsYm91cm5lIiwiYSI6ImNpejdob2J0czAwOWQzM21ubGt6MDVqaHoifQ.55YbqeTHWMK_b6CEAmoUlA';
-var map = new mapboxgl.Map({
-    container: 'map',
-    style: 'mapbox://styles/cityofmelbourne/cj1pz0q5d00382rp7zylkhxp1?update=1',
-    center: [144.9, -37.8],
-    zoom: 12
-});
-onLoad();
+})
 </script>
 
 </body>
