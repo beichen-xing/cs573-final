@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8' />
+    <title></title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v1.10.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v1.10.0/mapbox-gl.css" rel="stylesheet" />
+
+    <style>
+        /* This should probably go */
+        body { margin:0; padding:0; }
+
+        /* This one needs to be changed as appropriate for responsiveness */
+        #map { position:absolute; top:0; bottom:0; width:100%; }
+
+        /* From here downwards should be tweaked for MKW branding */
+        .mapboxgl-popup-content {
+            max-width: 400px;
+        }
+        .mapboxgl-popup-content img {
+            max-width: 80%;
+        }
+
+        .mapboxgl-popup-content .moreinfo {
+            display: block;
+            height:30px;
+            background:#00aecb;
+            color:white;
+        }
+
+        .map-overlay {
+            font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            position: absolute;
+            width: 25%;
+            top: 0;
+            left: 0;
+            padding: 10px;
+        }
+
+        .map-overlay .map-overlay-inner {
+            background-color: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+    </style>
+
+
+</head>
+<body>
+
+<div id='map'></div>
+<div class="map-overlay top">
+    <div class="map-overlay-inner">
+        <h2>Pedestrains in Melbourne</h2>
+        <label id="date"></label>
+        <input id="slider" type="range" min="1" max="61" step="1" value="1" />
+    </div>
+</div>
+
+<script>
+
+var mkwEvents = {};
+
+function eventsToGeoJson(events) {
+    var mapData = {
+        type:'FeatureCollection',
+        features: []
+    };
+    events.forEach(function(event) {
+        var long = Number(event.longitude);
+        var lat = Number(event.latitude);
+        var num = Number(event.Counts);
+        var date = parseInt((Number(event.Month) - 1) * 31 + Number(event.Date));
+        mapData.features.push({
+            type: 'Feature',
+            properties: {
+                'sensor_id': event.sensor_id,
+                'date': date
+            },
+            geometry: {
+                type: 'LineString',
+
+                coordinates: [
+                    [long - 0.0001, lat],
+                    [long, lat + num * 0.0000005],
+                    [long + 0.0001, lat]
+                ]
+            }
+        });
+    });
+    console.log(mapData);
+    return mapData;
+}
+
+function dumpAddressesCsv(acfs) {
+    var rows=[];
+    acfs.forEach(function(acf) {
+        var e = acf.acf;
+        rows.push({
+            id: acf.id,
+            address: [e.location_address.street1, e.location_address.street2, e.location_address.city, e.location_address.state, e.location_address.zip, 'Australia'].join(' ')
+        });
+        
+    });
+}
+
+var months = [
+    'March',
+    'April'
+];
+
+function filterBy(date) {
+    var filters = ['==', 'date', date];
+    map.setFilter('mkw-event-line', filters);
+    var month = Math.floor(date / 32);
+    var day = date - month * 31;
+    document.getElementById('date').textContent = months[month] + " " + day;
+}
+
+function whenMapLoaded(f) {
+    return map.loaded() ? f() : map.once('load', f);
+}
+
+
+mapboxgl.accessToken = 'pk.eyJ1IjoiY2l0eW9mbWVsYm91cm5lIiwiYSI6ImNpejdob2J0czAwOWQzM21ubGt6MDVqaHoifQ.55YbqeTHWMK_b6CEAmoUlA';
+var map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/cityofmelbourne/cj1pz0q5d00382rp7zylkhxp1?update=1',
+    center: [144.9, -37.8],
+    zoom: 12
+});
+map.on('load', function(){
+    d3.csv('data.csv', function(err, d) {
+        if(err) throw err;
+
+        var mapData = eventsToGeoJson(d);
+
+        map.addSource('mkw-events', {
+            type: 'geojson',
+            data: mapData
+        });
+
+        
+        map.addLayer({
+            id: 'mkw-event-line',
+            source: 'mkw-events',
+            type: 'line',
+            layout: {
+                'line-cap': 'round',
+                'line-join': 'round'            
+            }, 
+            paint: {
+                'line-color': '#ed6498',
+                'line-width': 2.5,
+                'line-opacity': 0.8
+            }
+        });
+
+        filterBy(1);
+
+        document
+            .getElementById('slider')
+            .addEventListener('input', function(e) {
+                var date = parseInt(e.target.value);
+                filterBy(date);
+            });
+    })
+
+})
+</script>
+
+</body>
+</html>
